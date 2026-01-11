@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  # 1. DATABASE
+  postgres:
+    image: postgres:15-alpine
+    container_name: payflow_postgres
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: root
+    volumes:
+      - ./init-db:/docker-entrypoint-initdb.d
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  # 2. BACKEND SERVICES
+  identity-service:
+    build: ./identity-service
+    ports: ["3001:3001"]
+    depends_on: [postgres]
+    restart: on-failure
+    environment:
+      - DATABASE_URL=postgres://admin:root@postgres:5432/identity_db
+
+  wallet-service:
+    build: ./wallet-service
+    ports: ["3002:3002"]
+    depends_on: [postgres]
+    restart: on-failure
+    environment:
+      - DATABASE_URL=postgres://admin:root@postgres:5432/wallet_db
+
+  transaction-service:
+    build: ./transaction-service
+    ports: ["3003:3003"]
+    depends_on: [postgres, wallet-service, analytics-service]
+    restart: on-failure
+    environment:
+      - DATABASE_URL=postgres://admin:root@postgres:5432/transaction_db
+
+  payment-service:
+    build: ./payment-service
+    ports: ["3004:3004"]
+    depends_on: [postgres, wallet-service]
+    environment:
+      - PUBLIC_URL=https://e6bd86ea9d329f18-180-245-24-166.serveousercontent.com
+
+  analytics-service:
+    build: ./analytics-service
+    ports: ["3005:3005"]
+    environment:
+      - GCP_KEYFILE=gcp-key.json
+      - GCP_PROJECT_ID=e-wallet-lite
+      - BQ_DATASET=ewallet_analytics
+
+  # 3. API GATEWAY
+  api-gateway:
+    build: ./api-gateway
+    ports: ["3000:3000"]
+    depends_on: 
+      - identity-service
+      - wallet-service
+      - transaction-service
+      - payment-service
+
+  # 4. FRONTEND
+  frontend:
+    build: ./frontend
+    ports: ["8080:3000"] # Map port 3000 container ke 8080 host agar tidak bentrok dengan Gateway
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:3000
+    stdin_open: true # React hot-reload di Docker
+    tty: true
+
+volumes:
+  postgres_data:

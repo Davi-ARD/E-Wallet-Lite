@@ -1,0 +1,12 @@
+# Dockerfile (untuk Backend/Gateway)
+FROM node:18-alpine
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm install
+
+COPY . .
+
+# CMD disesuaikan dengan script di package.json, biasanya node index.js
+CMD ["node", "index.js"]
